@@ -33,18 +33,14 @@ void setup() {
   lcd.setCursor(5, 1);
   lcd.print("SYSTEM");
   dht.begin();
-  delay(500);
+  delay(5000);
   lcd.clear();
 }
 void loop() {
+  String wifi_status;
+
   readDTH11_Sesnor();
   moisture_level_detected();
-
-  //Wait for a trigger command from the receiver Arduino
-
-
-
-
 
   // Construct the JSON payload
   DynamicJsonDocument jsonDoc(1024);
@@ -52,26 +48,27 @@ void loop() {
   jsonDoc["temperature"]["reading"] = temprature_value;
   jsonDoc["humidity"]["reading"] = humudity_value;
   jsonDoc["serial_number"] = serial_number;
-
+  Serial.flush();
   String payload;
   serializeJson(jsonDoc, payload);
   Serial.println(payload);
 
-  while (!Serial.available()) {
+  //Wait for a trigger command from the receiver Arduino
+  while (!Serial.available() && wait_for) {
     delay(100);
     wait_for--;
   }
-  String payload2;
+  String payload2 = "";
   if (Serial.available()) {
-      delay(5000);
     payload2 = Serial.readStringUntil('\n');
-    
+    delay(1000);
   }
 
-  
+
   deserializeJson(jsonDoc, payload2);
   JsonObject root = jsonDoc.as<JsonObject>();
   irrigationAction = root["predict"];
+  //  Serial.print(payload2);
   lcd.clear();
   lcd.print("schedule: ");
   lcd.print(irrigationAction);
@@ -79,7 +76,27 @@ void loop() {
   delay(1000);
 
   if (irrigationAction == 0) {
-    water_motor_start();
+    rain_sensor_value = digitalRead(rain_Sesnor);
+    if (rain_sensor_value && percent < high_threshold) {
+      water_motor_start();
+      while (percent < high_threshold) {
+        readDTH11_Sesnor();
+        moisture_level_detected();
+        rain_sensor_value = digitalRead(rain_Sesnor);
+        if (!rain_sensor_value || percent > high_threshold) {
+          digitalWrite(relay_Pin, HIGH);
+          lcd.clear();
+          lcd.print("Stopped");
+          if (!rain_sensor_value) {
+            lcd.setCursor(0, 1);
+            lcd.print("Due to Rain");
+          }
+          delay(5000);
+          return;
+        }
+      }
+    }
+    irrigationAction--;
   } else {
     while (irrigationAction > 0) {
       delay(1000);
@@ -87,15 +104,23 @@ void loop() {
     }
     irrigationAction--;
     rain_sensor_value = digitalRead(rain_Sesnor);
-    if (rain_sensor_value) {
+    if (rain_sensor_value && percent < high_threshold) {
       water_motor_start();
       while (percent < high_threshold) {
+
+        readDTH11_Sesnor();
         moisture_level_detected();
         rain_sensor_value = digitalRead(rain_Sesnor);
-        if (!rain_sensor_value) {
+        if (!rain_sensor_value || percent > high_threshold) {
+
           digitalWrite(relay_Pin, HIGH);
           lcd.clear();
-          lcd.print("raining");
+          lcd.print("Stopped");
+          if (!rain_sensor_value) {
+            lcd.setCursor(0, 1);
+            lcd.print("Due to Rain");
+
+          } delay(5000);
           return;
         }
       }
@@ -104,8 +129,7 @@ void loop() {
     lcd.clear();
     lcd.print("Motor OFF");
     lcd.setCursor(0, 2);
-    lcd.print("irrigation stopped");
-    delay(10000);
+    delay(3000);
   }
 
   //after sending the json payload it must wait
@@ -128,13 +152,13 @@ void readDTH11_Sesnor() {
   lcd.setCursor(0, 2);
   lcd.print(humudity_value);
   lcd.print("%");
-  delay(1000);
+  delay(3000);
   lcd.clear();
   lcd.print("Temperature: ");
   lcd.setCursor(0, 2);
   lcd.print(temprature_value);
   lcd.print(" C");
-  delay(1000);
+  delay(3000);
 }
 
 void moisture_level_detected() {
@@ -154,7 +178,7 @@ void moisture_level_detected() {
   lcd.setCursor(0, 1);
   lcd.print(percent);
   lcd.print("%");
-  delay(1000);
+  delay(3000);
 }
 
 void water_motor_start() {
@@ -162,6 +186,7 @@ void water_motor_start() {
   lcd.clear();
   lcd.print("Motor ON");
   lcd.setCursor(0, 2);
-  lcd.print("irrigation started");
+  lcd.print("Irrigation Started");
   digitalWrite(relay_Pin, LOW);
+  delay(3000);
 }

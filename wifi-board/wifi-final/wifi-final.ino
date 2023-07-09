@@ -6,21 +6,20 @@
 void setup() {
   Serial.begin(9600);
   WiFi.begin("sol", "12121212");
-  Serial.print("connection: Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
+  int timer = 15;
+  while (WiFi.status() != WL_CONNECTED && timer) {
     delay(1000);
-    Serial.print(".");
+    timer--;
   }
 }
 
 void loop() {
 
-
   if (WiFi.status() == WL_CONNECTED) {
     BearSSL::WiFiClientSecure client;
     HTTPClient http;
 
-    http.begin(client, "https://smartirrigate-backend-api.vercel.app/api/sensors/data");
+    http.begin(client, "https://smartirrigate.vercel.app/api/sensors/data");
     http.addHeader("Content-Type", "application/json");
 
     // Disable SSL verification
@@ -37,10 +36,10 @@ void loop() {
     if (Serial.available()) {
       delay(5000);
       payload = Serial.readStringUntil('\n');
-      
+
     }
 
-   
+
     DynamicJsonDocument jsonDoc(1024);
     deserializeJson(jsonDoc, payload);
     JsonObject root = jsonDoc.as<JsonObject>();
@@ -52,7 +51,6 @@ void loop() {
     String serialNumber = root["serial_number"].as<String>();
 
     String processedData = String("{\"moisture\":{\"reading\":") + String(moistureReading) + String("},\"temperature\":{\"reading\":") + String(temperatureReading) + String("},\"humidity\":{\"reading\":") + String(humidityReading) + String("},\"serial_number\":\"") + serialNumber + "\"}";
-
     int httpResponseCode = http.POST(processedData);
     if (httpResponseCode > 0) {
       String response = http.getString();
@@ -70,22 +68,20 @@ void loop() {
       doc["predict"] = predict;
       String jsonprediction;
       serializeJson(doc, jsonprediction);
-      Serial.println(jsonprediction);
-      Serial.println(message);
       Serial.flush();
+      Serial.println(jsonprediction);
+
 
     } else {
-      Serial.print("connection_error: Error on HTTP request");
+      Serial.println("connection_error: Error on HTTP request");
       Serial.println(httpResponseCode);
     }
 
     http.end();
   } else {
     WiFi.begin("sol", "12121212");
-    Serial.print("connection: Connecting to WiFi");
     while (WiFi.status() != WL_CONNECTED) {
       delay(1000);
-      Serial.print(".");
     }
   }
 }
